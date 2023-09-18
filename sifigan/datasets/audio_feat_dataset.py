@@ -147,21 +147,14 @@ class AudioFeatDataset(Dataset):
 
         # get auxiliary features
         aux_feats = []
-        # logmspだけそのまま取り出したい...
         for feat_type in self.aux_feats:
-            if feat_type == "logmsp":
-                aux_feat = read_hdf5(
-                    to_absolute_path(self.feat_files[idx]), f"/{feat_type}"
-                )
-                aux_feats += [aux_feat]
-            else:
-                aux_feat = read_hdf5(
-                to_absolute_path(self.feat_files[idx]), f"/{feat_type}"
-                )
-                if feat_type in ["f0", "cf0"]:  # f0 scaling
-                    aux_feat *= self.f0_factor
-                aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
-                aux_feats += [aux_feat]
+            aux_feat = read_hdf5(
+            to_absolute_path(self.feat_files[idx]), f"/{feat_type}"
+            )
+            if feat_type in ["f0", "cf0"]:  # f0 scaling
+                aux_feat *= self.f0_factor
+            aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
+            aux_feats += [aux_feat]
         aux_feats = np.concatenate(aux_feats, axis=1)
 
         # get dilated factor sequences
