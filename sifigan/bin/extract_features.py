@@ -10,19 +10,15 @@ References:
     - https://github.com/bigpon/QPPWG
     - https://github.com/k2kobayashi/sprocket
 
-"""     
+"""
 import copy
 import multiprocessing as mp
 import os
-import sys
 from logging import getLogger
-
-import matplotlib.pyplot as plt
 
 import hydra
 import librosa
 import numpy as np
-import pysptk
 import pyworld
 import soundfile as sf
 import yaml
@@ -30,23 +26,11 @@ from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
 from scipy.interpolate import interp1d
 from scipy.signal import firwin, lfilter
+
 from sifigan.utils import read_txt, write_hdf5
 
 # A logger for this file
 logger = getLogger(__name__)
-
-
-# All-pass-filter coefficients {key -> sampling rate : value -> coefficient}
-ALPHA = {
-    8000: 0.312,
-    12000: 0.369,
-    16000: 0.410,
-    22050: 0.455,
-    24000: 0.466,
-    32000: 0.504,
-    44100: 0.544,
-    48000: 0.554,
-}
 
 
 def path_create(wav_list, in_dir, out_dir, extname):
@@ -255,99 +239,6 @@ def melfilterbank(
     return np.dot(spc, mel_basis.T)
 
 
-def world_feature_extract(queue, wav_list, config):
-    """WORLD feature extraction
-
-    Args:
-        queue (multiprocessing.Queue): the queue to store the file name of utterance
-        wav_list (list): list of the wav files
-        config (dict): feature extraction config
-
-    """
-    # extraction
-    for i, wav_name in enumerate(wav_list):
-        logger.info(f"now processing {wav_name} ({i + 1}/{len(wav_list)})")
-
-        # load wavfile
-        x, fs = sf.read(to_absolute_path(wav_name))
-        x = np.array(x, dtype=np.float)
-
-        # check sampling frequency
-        if not fs == config.sample_rate:
-            logger.warning(
-                f"Sampling frequency of {wav_name} is not matched."
-                + "Resample before feature extraction."
-            )
-            x = librosa.resample(x, orig_sr=fs, target_sr=config.sample_rate)
-
-        # apply low-cut-filter
-        if config.highpass_cutoff > 0:
-            if (x == 0).all():
-                logger.info(f"xxxxx {wav_name}")
-                continue
-            x = low_cut_filter(x, config.sample_rate, cutoff=config.highpass_cutoff)
-
-        # extract WORLD features
-        f0, t = pyworld.harvest(
-            x,
-            fs=config.sample_rate,
-            f0_floor=config.minf0,
-            f0_ceil=config.maxf0,
-            frame_period=config.shiftms,
-        )
-        env = pyworld.cheaptrick(
-            x,
-            f0,
-            t,
-            fs=config.sample_rate,
-            fft_size=config.fft_size,
-        )
-        ap = pyworld.d4c(
-            x,
-            f0,
-            t,
-            fs=config.sample_rate,
-            fft_size=config.fft_size,
-        )
-        uv, cf0, is_all_uv = convert_continuos_f0(f0)
-        if is_all_uv:
-            lpf_fs = int(config.sample_rate / config.hop_size)
-            cf0_lpf = low_pass_filter(cf0, lpf_fs, cutoff=20)
-            next_cutoff = 70
-            while not (cf0_lpf >= [0]).all():
-                cf0_lpf = low_pass_filter(cf0, lpf_fs, cutoff=next_cutoff)
-                next_cutoff *= 2
-        else:
-            cf0_lpf = cf0
-            logger.warn(f"all of the f0 values are 0 {wav_name}.")
-        mcep = pysptk.sp2mc(env, order=config.mcep_dim, alpha=ALPHA[config.sample_rate])
-        bap = pyworld.code_aperiodicity(ap, config.sample_rate)
-
-        # adjust shapes
-        minlen = min(uv.shape[0], mcep.shape[0])
-        uv = np.expand_dims(uv[:minlen], axis=-1)
-        f0 = np.expand_dims(f0[:minlen], axis=-1)
-        cf0_lpf = np.expand_dims(cf0_lpf[:minlen], axis=-1)
-        mcep = mcep[:minlen]
-        bap = bap[:minlen]
-
-        # save features
-        feat_name = path_replace(
-            wav_name,
-            config.in_dir,
-            config.out_dir,
-            extname=config.feature_format,
-        )
-        logger.info(f"{to_absolute_path(feat_name)}")
-        write_hdf5(to_absolute_path(feat_name), "/uv", uv)
-        write_hdf5(to_absolute_path(feat_name), "/f0", f0)
-        write_hdf5(to_absolute_path(feat_name), "/cf0", cf0_lpf)
-        write_hdf5(to_absolute_path(feat_name), "/mcep", mcep)
-        write_hdf5(to_absolute_path(feat_name), "/bap", bap)
-
-    queue.put("Finish")
-    
-
 def vaevocoder_feature_extraction(queue, wav_list, config):
     """Mel-spectrogram,f0 and WORLD feature extraction.
 
@@ -363,17 +254,16 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
 
         # load wavfile
         x, fs = sf.read(to_absolute_path(wav_name))
-        x = np.array(x, dtype=np.float)
+        x = np.array(x, dtype=np.float64)
 
         # check sampling frequency
         if not fs == config.sample_rate:
             logger.warning(
-                f"Sampling frequency of {wav_name} is not matched."
-                + "Resample before feature extraction."
+                f"Sampling frequency of {wav_name} is not matched." + "Resample before feature extraction."
             )
             x = librosa.resample(x, orig_sr=fs, target_sr=config.sample_rate)
 
-        # apply low-cut-filter
+        # apply a low-cut filter for noise suppression
         if config.highpass_cutoff > 0:
             if (x == 0).all():
                 logger.info(f"xxxxx {wav_name}")
@@ -388,20 +278,6 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
             f0_ceil=config.maxf0,
             frame_period=config.shiftms,
         )
-        env = pyworld.cheaptrick(
-            x,
-            f0,
-            t,
-            fs=config.sample_rate,
-            fft_size=config.fft_size,
-        )
-        ap = pyworld.d4c(
-            x,
-            f0,
-            t,
-            fs=config.sample_rate,
-            fft_size=config.fft_size,
-        )
         uv, cf0, is_all_uv = convert_continuos_f0(f0)
         if is_all_uv:
             lpf_fs = int(config.sample_rate / config.hop_size)
@@ -413,9 +289,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
         else:
             cf0_lpf = cf0
             logger.warn(f"all of the f0 values are 0 {wav_name}.")
-        mcep = pysptk.sp2mc(env, order=config.mcep_dim, alpha=ALPHA[config.sample_rate])
-        bap = pyworld.code_aperiodicity(ap, config.sample_rate)
-        
+
         # calculate mel-spectrogram
         mel = melfilterbank(
             x,
@@ -428,20 +302,28 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
             fmin=config.fmin,
             fmax=config.fmax,
         )
-        
         # To avoid zero-division error, apply clipping
         mel = np.clip(mel, 1e-7, None)
-        
+
         logmsp = 20 * np.log10(mel)
 
+        spc = np.abs(
+            librosa.stft(
+                x,
+                n_fft=config.fft_size,
+                hop_length=config.hop_size,
+                win_length=config.win_length,
+                window=config.window,
+                pad_mode="reflect",
+            )
+        ).T  # (# frames, #bins)
+        spc = np.clip(spc, 1e-7, None)
+        logspc = 20 * np.log10(spc)
+
         # adjust shapes
-        minlen = min(uv.shape[0], mcep.shape[0])
-        uv = np.expand_dims(uv[:minlen], axis=-1)
-        f0 = np.expand_dims(f0[:minlen], axis=-1)
-        cf0_lpf = np.expand_dims(cf0_lpf[:minlen], axis=-1)
-        logmsp = logmsp[:minlen]
-        mcep = mcep[:minlen]
-        bap = bap[:minlen]
+        uv = np.expand_dims(uv, axis=-1)
+        f0 = np.expand_dims(f0, axis=-1)
+        cf0_lpf = np.expand_dims(cf0_lpf, axis=-1)
 
         # save features
         feat_name = path_replace(
@@ -455,8 +337,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
         write_hdf5(to_absolute_path(feat_name), "/f0", f0)
         write_hdf5(to_absolute_path(feat_name), "/cf0", cf0_lpf)
         write_hdf5(to_absolute_path(feat_name), "/logmsp", logmsp)
-        write_hdf5(to_absolute_path(feat_name), "/mcep", mcep)
-        write_hdf5(to_absolute_path(feat_name), "/bap", bap)
+        write_hdf5(to_absolute_path(feat_name), "/logspc", logspc)
 
     queue.put("Finish")
 

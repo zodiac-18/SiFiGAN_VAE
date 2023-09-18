@@ -2,9 +2,9 @@
 
 defaults:
   - _self_
-  - generator: sifigan
+  - generator: vaeganvocoder
   - discriminator: univnet
-  - train: sifigan
+  - train: vaeganvocoder
   - data: namine_ritsu
 
 hydra:
@@ -14,8 +14,8 @@ hydra:
   job_logging:
     formatters:
       simple:
-        format: '[%(asctime)s][%(levelname)s][%(module)s | %(lineno)s] %(message)s'
+        format: "[%(asctime)s][%(levelname)s][%(module)s | %(lineno)s] %(message)s"
     disable_existing_loggers: false
 
-out_dir:     # Directory to output training results.
-seed: 12345  # Seed number for random numbers.
+out_dir: # Directory to output training results.
+seed: 12345 # Seed number for random numbers.

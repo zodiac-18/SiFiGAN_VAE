@@ -3,7 +3,7 @@
 # Copyright 2022 Reo Yoneyama (Nagoya University)
 #  MIT License (https://opensource.org/licenses/MIT)
 
-"""Decoding Script for Source-Filter HiFiGAN.
+"""Decoding Script for SiFi-GAN VAE.
 
 References:
     - https://github.com/kan-bayashi/ParallelWaveGAN
@@ -15,17 +15,15 @@ import os
 from logging import getLogger
 from time import time
 
-import librosa
-import matplotlib.pyplot as plt
 import hydra
 import numpy as np
 import soundfile as sf
 import torch
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
-from sifigan.datasets import FeatDataset
-from sifigan.utils import SignalGenerator, dilated_factor
 from tqdm import tqdm
+
+from sifigan.datasets import FeatDataset
 
 # A logger for this file
 logger = getLogger(__name__)
@@ -77,19 +75,11 @@ def main(config: DictConfig) -> None:
         )
         logger.info(f"The number of features to be decoded = {len(dataset)}.")
 
-        signal_generator = SignalGenerator(
-            sample_rate=config.data.sample_rate,
-            hop_size=config.data.hop_size,
-            sine_amp=config.data.sine_amp,
-            noise_amp=config.data.noise_amp,
-            signal_types=config.data.signal_types,
-        )
-
         with torch.no_grad(), tqdm(dataset, desc="[decode]") as pbar:
             for idx, (feat_path, c, f0, cf0) in enumerate(pbar, 1):
                 spec_lengths = torch.LongTensor([c.shape[0]]).to(device)
                 # mel: 80-dimensional log-melspectrogram
-                mel = torch.FloatTensor(c).unsqueeze(0).transpose(2, 1).to(device) # (1, 80, T)
+                mel = torch.FloatTensor(c).unsqueeze(0).transpose(2, 1).to(device)  # (1, 80, T)
                 f0 = torch.FloatTensor(f0).view(1, 1, -1).to(device)
 
                 # perform decoding

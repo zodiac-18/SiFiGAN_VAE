@@ -1,0 +1,12 @@
+__pycache__
+.eggs
+*.egg-info
+*.log
+*.out
+*.wav
+*.png
+*.h5
+.venv_sifigan_vae
+
+egs/*/exp
+egs
