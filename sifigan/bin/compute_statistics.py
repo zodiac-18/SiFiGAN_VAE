@@ -19,8 +19,9 @@ import numpy as np
 from hydra.utils import to_absolute_path
 from joblib import dump, load
 from omegaconf import DictConfig, OmegaConf
-from sifigan.utils import read_hdf5, read_txt
 from sklearn.preprocessing import StandardScaler
+
+from sifigan.utils import read_hdf5, read_txt
 
 # A logger for this file
 logger = getLogger(__name__)
@@ -54,7 +55,6 @@ def calc_stats(file_list, config):
             if feat.shape[0] == 0:
                 logger.warning(f"feat length is 0 {filename}/{feat_type}")
                 continue
-            print(f"{feat_type}: {feat.shape}")
             scaler[feat_type].partial_fit(feat)
 
     if not os.path.exists(os.path.dirname(config.stats)):
