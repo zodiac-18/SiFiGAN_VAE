@@ -143,3 +143,28 @@ def check_filename(list1, list2):
     list2 = list(map(_filename, list2))
 
     return list1 == list2
+
+
+def validate_length(xs, ys=None, hop_size=None):
+    """Validate length
+
+    Args:
+        xs (ndarray): numpy array of features
+        ys (ndarray): numpy array of audios
+        hop_size (int): upsampling factor
+
+    Returns:
+        (ndarray): length adjusted features
+
+    """
+    min_len_x = min([x.shape[0] for x in xs])
+    if ys is not None:
+        min_len_y = min([y.shape[0] for y in ys])
+        if min_len_y < min_len_x * hop_size:
+            min_len_x = min_len_y // hop_size
+        if min_len_y > min_len_x * hop_size:
+            min_len_y = min_len_x * hop_size
+        ys = [y[:min_len_y] for y in ys]
+    xs = [x[:min_len_x] for x in xs]
+
+    return xs + ys if ys is not None else xs

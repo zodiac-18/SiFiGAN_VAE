@@ -19,8 +19,9 @@ import numpy as np
 import soundfile as sf
 from hydra.utils import to_absolute_path
 from joblib import load
-from sifigan.utils import check_filename, read_hdf5, read_txt, validate_length
 from torch.utils.data import Dataset
+
+from sifigan.utils import check_filename, read_hdf5, read_txt, validate_length
 
 # A logger for this file
 logger = getLogger(__name__)
@@ -40,7 +41,8 @@ class AudioFeatDataset(Dataset):
         allow_cache=False,
         sample_rate=24000,
         hop_size=120,
-        aux_feats=["mcep", "bap"],
+        aux_feats=["logspc"],
+        use_cont_f0=True,
     ):
         """Initialize dataset.
 
@@ -65,11 +67,7 @@ class AudioFeatDataset(Dataset):
         # filter by threshold
         if audio_length_threshold is not None:
             audio_lengths = [sf.read(to_absolute_path(f)).shape[0] for f in audio_files]
-            idxs = [
-                idx
-                for idx in range(len(audio_files))
-                if audio_lengths[idx] > audio_length_threshold
-            ]
+            idxs = [idx for idx in range(len(audio_files)) if audio_lengths[idx] > audio_length_threshold]
             if len(audio_files) != len(idxs):
                 logger.warning(
                     f"Some files are filtered by audio length threshold "
@@ -78,18 +76,11 @@ class AudioFeatDataset(Dataset):
             audio_files = [audio_files[idx] for idx in idxs]
             feat_files = [feat_files[idx] for idx in idxs]
         if feat_length_threshold is not None:
-            f0_lengths = [
-                read_hdf5(to_absolute_path(f), "/f0").shape[0] for f in feat_files
-            ]
-            idxs = [
-                idx
-                for idx in range(len(feat_files))
-                if f0_lengths[idx] > feat_length_threshold
-            ]
+            f0_lengths = [read_hdf5(to_absolute_path(f), "/f0").shape[0] for f in feat_files]
+            idxs = [idx for idx in range(len(feat_files)) if f0_lengths[idx] > feat_length_threshold]
             if len(feat_files) != len(idxs):
                 logger.warning(
-                    f"Some files are filtered by mel length threshold "
-                    f"({len(feat_files)} -> {len(idxs)})."
+                    f"Some files are filtered by mel length threshold " f"({len(feat_files)} -> {len(idxs)})."
                 )
             audio_files = [audio_files[idx] for idx in idxs]
             feat_files = [feat_files[idx] for idx in idxs]
@@ -107,6 +98,7 @@ class AudioFeatDataset(Dataset):
         self.sample_rate = sample_rate
         self.hop_size = hop_size
         self.aux_feats = aux_feats
+        self.use_cont_f0 = use_cont_f0
         logger.info(f"Feature type : {self.aux_feats}")
 
         if allow_cache:
@@ -148,28 +140,26 @@ class AudioFeatDataset(Dataset):
         # get auxiliary features
         aux_feats = []
         for feat_type in self.aux_feats:
-            aux_feat = read_hdf5(
-            to_absolute_path(self.feat_files[idx]), f"/{feat_type}"
-            )
+            aux_feat = read_hdf5(to_absolute_path(self.feat_files[idx]), f"/{feat_type}")
             if feat_type in ["f0", "cf0"]:  # f0 scaling
                 aux_feat *= self.f0_factor
             aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
             aux_feats += [aux_feat]
         aux_feats = np.concatenate(aux_feats, axis=1)
 
-        # get dilated factor sequences
-        f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/f0")  # descrete F0
-        cf0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/cf0")  # continuous F0
+        # get a f0 sequence
+        if self.use_cont_f0:
+            f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/cf0")
+        else:
+            f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/f0")
 
         # adjust length
-        aux_feats, f0, cf0, audio = validate_length(
-            (aux_feats, f0, cf0), (audio,), self.hop_size
-        )
+        aux_feats, f0, audio = validate_length((aux_feats, f0), (audio,), self.hop_size)
 
         if self.return_filename:
-            items = self.feat_files[idx], audio, aux_feats, f0, cf0
+            items = self.feat_files[idx], audio, aux_feats, f0
         else:
-            items = audio, aux_feats, f0, cf0
+            items = audio, aux_feats, f0
 
         if self.allow_cache:
             self.caches[idx] = items
@@ -198,8 +188,9 @@ class FeatDataset(Dataset):
         allow_cache=False,
         sample_rate=24000,
         hop_size=120,
-        aux_feats=["mcep", "bap"],
+        aux_feats=["logspc"],
         f0_factor=1.0,
+        use_cont_f0=True,
     ):
         """Initialize dataset.
 
@@ -220,18 +211,11 @@ class FeatDataset(Dataset):
 
         # filter by threshold
         if feat_length_threshold is not None:
-            f0_lengths = [
-                read_hdf5(to_absolute_path(f), "/f0").shape[0] for f in feat_files
-            ]
-            idxs = [
-                idx
-                for idx in range(len(feat_files))
-                if f0_lengths[idx] > feat_length_threshold
-            ]
+            f0_lengths = [read_hdf5(to_absolute_path(f), "/f0").shape[0] for f in feat_files]
+            idxs = [idx for idx in range(len(feat_files)) if f0_lengths[idx] > feat_length_threshold]
             if len(feat_files) != len(idxs):
                 logger.warning(
-                    f"Some files are filtered by mel length threshold "
-                    f"({len(feat_files)} -> {len(idxs)})."
+                    f"Some files are filtered by mel length threshold " f"({len(feat_files)} -> {len(idxs)})."
                 )
             feat_files = [feat_files[idx] for idx in idxs]
 
@@ -244,6 +228,7 @@ class FeatDataset(Dataset):
         self.sample_rate = sample_rate
         self.hop_size = hop_size
         self.aux_feats = aux_feats
+        self.use_cont_f0 = use_cont_f0
         self.f0_factor = f0_factor
         logger.info(f"Feature type : {self.aux_feats}")
 
@@ -275,30 +260,29 @@ class FeatDataset(Dataset):
         # get auxiliary features
         aux_feats = []
         for feat_type in self.aux_feats:
-            aux_feat = read_hdf5(
-                to_absolute_path(self.feat_files[idx]), f"/{feat_type}"
-            )
+            aux_feat = read_hdf5(to_absolute_path(self.feat_files[idx]), f"/{feat_type}")
             if feat_type in ["f0", "cf0"]:  # f0 scaling
                 aux_feat *= self.f0_factor
             aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
             aux_feats += [aux_feat]
         aux_feats = np.concatenate(aux_feats, axis=1)
 
-        # get f0 sequences
-        f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/f0")  # descrete F0
-        cf0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/cf0")  # continuous F0
+        # get a f0 sequence
+        if self.use_cont_f0:
+            f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/cf0")
+        else:
+            f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/f0")
 
         # adjust length
-        aux_feats, f0, cf0 = validate_length((aux_feats, f0, cf0))
+        aux_feats, f0 = validate_length((aux_feats, f0))
 
         # f0 scaling
         f0 *= self.f0_factor
-        cf0 *= self.f0_factor
 
         if self.return_filename:
-            items = self.feat_files[idx], aux_feats, f0, cf0
+            items = self.feat_files[idx], aux_feats, f0
         else:
-            items = aux_feats, f0, cf0
+            items = aux_feats, f0
 
         if self.allow_cache:
             self.caches[idx] = items
