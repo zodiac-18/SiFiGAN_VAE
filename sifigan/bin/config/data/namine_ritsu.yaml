@@ -10,7 +10,7 @@ allow_cache: false # Whether to allow cache in dataset. If true, it requires cpu
 # Feature settings
 sample_rate: 24000 # Sampling rate.
 hop_size: 120 # Hop size.
-aux_feats: ["logspc"] # Auxiliary features.
+aux_feats: ["logmsp"] # Auxiliary features.
 use_cont_f0: true # Whether to use continuous f0.
 
 # Collater setting

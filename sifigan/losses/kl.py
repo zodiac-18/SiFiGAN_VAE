@@ -24,5 +24,4 @@ class KLDivergenceLoss(nn.Module):
         log_var = log_var.float()
 
         kl_loss = - 0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
-        print(kl_loss)
         return kl_loss

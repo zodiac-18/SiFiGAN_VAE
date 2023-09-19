@@ -76,7 +76,7 @@ def main(config: DictConfig) -> None:
         logger.info(f"The number of features to be decoded = {len(dataset)}.")
 
         with torch.no_grad(), tqdm(dataset, desc="[decode]") as pbar:
-            for idx, (feat_path, c, f0, cf0) in enumerate(pbar, 1):
+            for idx, (feat_path, c, f0) in enumerate(pbar, 1):
                 spec_lengths = torch.LongTensor([c.shape[0]]).to(device)
                 # mel: 80-dimensional log-melspectrogram
                 mel = torch.FloatTensor(c).unsqueeze(0).transpose(2, 1).to(device)  # (1, 80, T)

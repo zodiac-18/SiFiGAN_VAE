@@ -103,11 +103,11 @@ class VAEGANVocoder(nn.Module):
 
     def forward(self, mel, spec_length, f0):
         # encode mel to z
-        # mu, logvar, z, _ = self.encoder(mel, spec_length)
+        mu, logvar, z, _ = self.encoder(mel, spec_length)
 
         # decode z to waveform
-        # x, s = self.decoder(z, f0)
-        x, s = self.decoder(mel, f0)
+        x, s = self.decoder(z, f0)
+        # x, s = self.decoder(mel, f0)
 
         # return mu, logvar, x, s
-        return x, s
+        return mu, logvar, x, s

@@ -150,16 +150,16 @@ class Trainer(object):
 
         # generator forward
         # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
-        # mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        y_, s = self.model["generator"](mel, spec_lengths, f0)
+        mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
+        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         # initialize generator loss
         gen_loss = 0.0
 
         # calculate kl divergence loss
-        # kl_loss = self.criterion["kl"](mu, logvar)
-        # gen_loss += self.config.train.lambda_kl * kl_loss
-        # self.total_train_loss["train/kl_loss"] += kl_loss.item()
+        kl_loss = self.criterion["kl"](mu, logvar)
+        gen_loss += self.config.train.lambda_kl * kl_loss
+        self.total_train_loss["train/kl_loss"] += kl_loss.item()
 
         # calculate spectral loss
         mel_loss = self.criterion["mel"](y_, y)
@@ -261,16 +261,16 @@ class Trainer(object):
 
         # generator forward
         # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
-        # mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        y_, s = self.model["generator"](mel, spec_lengths, f0)
+        mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
+        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         # initialize generator loss
         gen_loss = 0.0
 
         # calculate kl divergence loss
-        # kl_loss = self.criterion["kl"](mu, logvar)
-        # gen_loss += self.config.train.lambda_kl * kl_loss
-        # self.total_eval_loss["eval/kl_loss"] += kl_loss.item()
+        kl_loss = self.criterion["kl"](mu, logvar)
+        gen_loss += self.config.train.lambda_kl * kl_loss
+        self.total_eval_loss["eval/kl_loss"] += kl_loss.item()
 
         # calculate spectral loss
         mel_loss = self.criterion["mel"](y_, y)
@@ -358,8 +358,8 @@ class Trainer(object):
         y, mel, spec_lengths, f0 = batch
 
         # generator forward
-        # mu, log_var, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        y_, s = self.model["generator"](mel, spec_lengths, f0)
+        mu, log_var, y_, s = self.model["generator"](mel, spec_lengths, f0)
+        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         len50ms = int(self.config.data.sample_rate * 0.05)
         start = np.random.randint(0, self.config.data.batch_max_length - len50ms)
