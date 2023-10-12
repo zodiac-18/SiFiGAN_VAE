@@ -1,8 +1,8 @@
 _target_: sifigan.models.VAEGANVocoder
 encoder_params:
-    in_x_channels: 80 # Number of input x channels(VAE).
+    in_x_channels: 513 # Number of input x channels(VAE).
     out_z_channels: 43 # Number of output z channels(VAE).
-    hidden_channels: 256 # Number of hidden channels(VAE).
+    hidden_channels: 192 # Number of hidden channels(VAE).
     kernel_size: 7 # Kernel size of initial and final conv layers.
     dilation_rate: 1 # Dilation rate(VAE).
     n_resblock: 16 # Number of residual block(VAE).

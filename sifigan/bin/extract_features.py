@@ -318,6 +318,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
             )
         ).T  # (# frames, #bins)
         spc = np.clip(spc, 1e-7, None)
+        
         logspc = 20 * np.log10(spc)
 
         # adjust shapes
@@ -337,6 +338,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
         write_hdf5(to_absolute_path(feat_name), "/f0", f0)
         write_hdf5(to_absolute_path(feat_name), "/cf0", cf0_lpf)
         write_hdf5(to_absolute_path(feat_name), "/logmsp", logmsp)
+        write_hdf5(to_absolute_path(feat_name), "/spc", spc)
         write_hdf5(to_absolute_path(feat_name), "/logspc", logspc)
 
     queue.put("Finish")
