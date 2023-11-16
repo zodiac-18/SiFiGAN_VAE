@@ -12,4 +12,4 @@ hydra:
 
 feats: data/scp/namine_ritsu_train_no_dev.list # List file of input features.
 stats: data/stats/namine_ritsu_train_no_dev.joblib # Path to file to output statistics.
-feat_types: ["f0", "cf0", "uv", "logmsp", "logspc"] # Feature types.
+feat_types: ["f0", "cf0", "uv", "logmsp", "spc", "logspc"] # Feature types.
