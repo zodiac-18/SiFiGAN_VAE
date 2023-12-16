@@ -29,6 +29,7 @@ from tqdm import tqdm
 import sifigan
 import sifigan.models
 from sifigan.datasets import AudioFeatDataset
+from sifigan.utils import create_scp_for_aug
 
 # set to avoid matplotlib error in CLI environment
 matplotlib.use("Agg")
@@ -518,7 +519,6 @@ class Collater(object):
         c_batch = torch.FloatTensor(np.array(c_batch)).transpose(2, 1)  # (B, 1, T')
         f0_batch = torch.FloatTensor(np.array(f0_batch)).transpose(2, 1)  # (B, 1, T')
 
-        # VAEvocoder用にreturnするものを変えてます
         # c_batch: mel-spectrogram
         # spec_lengths: lengths of c_batch
         return y_batch, c_batch, spec_lengths, f0_batch
@@ -563,10 +563,15 @@ def main(config: DictConfig) -> None:
         feat_length_threshold = config.data.batch_max_length // config.data.hop_size
     else:
         feat_length_threshold = None
+    
+    if config.f0_aug:
+        train_audio = create_scp_for_aug(to_absolute_path(config.data.train_audio), config.f0_conv_num)
+    else:
+        train_audio = to_absolute_path(config.data.train_audio)
 
     train_dataset = AudioFeatDataset(
         stats=to_absolute_path(config.data.stats),
-        audio_list=to_absolute_path(config.data.train_audio),
+        audio_list=train_audio,
         feat_list=to_absolute_path(config.data.train_feat),
         feat_length_threshold=feat_length_threshold,
         allow_cache=config.data.allow_cache,

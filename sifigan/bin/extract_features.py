@@ -27,7 +27,7 @@ from omegaconf import DictConfig, OmegaConf
 from scipy.interpolate import interp1d
 from scipy.signal import firwin, lfilter
 
-from sifigan.utils import read_txt, write_hdf5
+from sifigan.utils import read_txt, write_hdf5, random_formant_f0, shifter
 
 # A logger for this file
 logger = getLogger(__name__)
@@ -101,14 +101,15 @@ def aux_list_create(wav_list_file, config):
     wav_files = read_txt(wav_list_file)
     with open(aux_list_file, "w") as f:
         for wav_name in wav_files:
-            feat_name = path_replace(
+            _feat_name = path_replace(
                 wav_name,
                 config.in_dir,
                 config.out_dir,
                 extname=config.feature_format,
             )
-            f.write(f"{feat_name}\n")
-
+            for i in range(config.f0_conv_num+1):
+                feat_name = _feat_name.replace(".h5", f"_{i}.h5") if i > 0 else _feat_name
+                f.write(f"{feat_name}\n")
 
 def low_cut_filter(x, fs, cutoff=70):
     """Low cut filter
@@ -248,6 +249,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
         config (dict): feature extraction config
 
     """
+    np.random.seed(config.seed)
     # extraction
     for i, wav_name in enumerate(wav_list):
         logger.info(f"now processing {wav_name} ({i + 1}/{len(wav_list)})")
@@ -278,6 +280,8 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
             f0_ceil=config.maxf0,
             frame_period=config.shiftms,
         )
+        sp = pyworld.cheaptrick(x, f0, t, fs=config.sample_rate)
+        ap = pyworld.d4c(x, f0, t, fs=config.sample_rate)
         uv, cf0, is_all_uv = convert_continuos_f0(f0)
         if is_all_uv:
             lpf_fs = int(config.sample_rate / config.hop_size)
@@ -289,57 +293,77 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
         else:
             cf0_lpf = cf0
             logger.warn(f"all of the f0 values are 0 {wav_name}.")
+        
+        if config.f0_aug:
+            f0_factor = np.random.uniform(0.5, 2.0, config.f0_conv_num)
+            if config.f0_world:
+                x_list = np.array(x + [pyworld.synthesize(f0 * f0_factor[k], sp, ap, fs=config.sample_rate)[:len(x)] for k in range(config.f0_conv_num)])
+            elif config.f0_content_vec:
+                x_list = np.array(x + [random_formant_f0(x, fs)[0] for _ in range(config.f0_conv_num)])
+            elif config.f0_shifter:
+                x_list = np.array(x + [shifter(x, fs, f0_factor[k]) for k in range(config.f0_conv_num)])
+        else:
+            x_list =  x[np.newaxis, :]
+        # NOTE: for debug
+        if config.f0_aug and config.f0_shifter and i < 5:
+            audio_y = shifter(x, fs, f0_factor[0])
+            sf.write(f"test_{i+1}_{f0_factor[0]}.wav", data=audio_y, samplerate=fs)
+            logger.info(f"Audio generated:'test_{i+1}_{f0_factor[0]}.wav', f0 factor is: {f0_factor[0]}")
 
-        # calculate mel-spectrogram
-        mel = melfilterbank(
-            x,
-            sample_rate=config.sample_rate,
-            fft_size=config.fft_size,
-            hop_size=config.hop_size,
-            win_length=config.win_length,
-            window=config.window,
-            num_mels=config.num_mels,
-            fmin=config.fmin,
-            fmax=config.fmax,
-        )
-        # To avoid zero-division error, apply clipping
-        mel = np.clip(mel, 1e-7, None)
-
-        logmsp = 20 * np.log10(mel)
-
-        spc = np.abs(
-            librosa.stft(
-                x,
-                n_fft=config.fft_size,
-                hop_length=config.hop_size,
+        
+        for j in range(config.f0_conv_num+1):
+            # calculate mel-spectrogram
+            mel = melfilterbank(
+                x_list[j-1],
+                sample_rate=config.sample_rate,
+                fft_size=config.fft_size,
+                hop_size=config.hop_size,
                 win_length=config.win_length,
                 window=config.window,
-                pad_mode="reflect",
+                num_mels=config.num_mels,
+                fmin=config.fmin,
+                fmax=config.fmax,
             )
-        ).T  # (# frames, #bins)
-        spc = np.clip(spc, 1e-7, None)
-        
-        logspc = 20 * np.log10(spc)
+            mel = np.clip(mel, 1e-7, None)
 
-        # adjust shapes
-        uv = np.expand_dims(uv, axis=-1)
-        f0 = np.expand_dims(f0, axis=-1)
-        cf0_lpf = np.expand_dims(cf0_lpf, axis=-1)
+            logmsp = 20 * np.log10(mel)
+            
+            spc = np.abs(
+                librosa.stft(
+                    x,
+                    n_fft=config.fft_size,
+                    hop_length=config.hop_size,
+                    win_length=config.win_length,
+                    window=config.window,
+                    pad_mode="reflect",
+                )
+            ).T  # (# frames, #bins)
+            spc = np.clip(spc, 1e-7, None)
+            
+            logspc = 20 * np.log10(spc)
 
-        # save features
-        feat_name = path_replace(
-            wav_name,
-            config.in_dir,
-            config.out_dir,
-            extname=config.feature_format,
-        )
-        logger.info(f"{to_absolute_path(feat_name)}")
-        write_hdf5(to_absolute_path(feat_name), "/uv", uv)
-        write_hdf5(to_absolute_path(feat_name), "/f0", f0)
-        write_hdf5(to_absolute_path(feat_name), "/cf0", cf0_lpf)
-        write_hdf5(to_absolute_path(feat_name), "/logmsp", logmsp)
-        write_hdf5(to_absolute_path(feat_name), "/spc", spc)
-        write_hdf5(to_absolute_path(feat_name), "/logspc", logspc)
+            # adjust shapes
+            uv = np.expand_dims(uv, axis=-1) if uv.ndim == 1 else uv
+            f0 = np.expand_dims(f0, axis=-1)
+            cf0_lpf = np.expand_dims(cf0_lpf, axis=-1) if cf0_lpf.ndim == 1 else cf0_lpf
+
+            # save features
+            feat_name = path_replace(
+                wav_name,
+                config.in_dir,
+                config.out_dir,
+                extname=config.feature_format,
+            )
+            
+            if j > 0:
+                feat_name = feat_name.replace(".h5", f"_{j}.h5")
+            logger.info(f"{to_absolute_path(feat_name)}")
+            write_hdf5(to_absolute_path(feat_name), "/uv", uv)
+            write_hdf5(to_absolute_path(feat_name), "/f0", f0)
+            write_hdf5(to_absolute_path(feat_name), "/cf0", cf0_lpf)
+            write_hdf5(to_absolute_path(feat_name), "/logmsp", logmsp)
+            write_hdf5(to_absolute_path(feat_name), "/spc", spc)
+            write_hdf5(to_absolute_path(feat_name), "/logspc", logspc)
 
     queue.put("Finish")
 

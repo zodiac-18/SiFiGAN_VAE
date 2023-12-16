@@ -110,4 +110,4 @@ class VAEGANVocoder(nn.Module):
         # x, s = self.decoder(mel, f0)
 
         # return mu, logvar, x, s
-        return mu, logvar, x, s
+        return mu, logvar, x, s, z

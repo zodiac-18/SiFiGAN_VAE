@@ -141,7 +141,6 @@ def check_filename(list1, list2):
 
     list1 = list(map(_filename, list1))
     list2 = list(map(_filename, list2))
-
     return list1 == list2
 
 
@@ -168,3 +167,13 @@ def validate_length(xs, ys=None, hop_size=None):
     xs = [x[:min_len_x] for x in xs]
 
     return xs + ys if ys is not None else xs
+
+def create_scp_for_aug(audio_path, f0_conv_num):
+    new_audio_path = audio_path.replace(".", "_aug.")
+    
+    with open(audio_path, "r") as f_read, open(new_audio_path, "w") as f_write:
+        for line in f_read:
+            f_write.write(line * (f0_conv_num+1))
+    
+    logger.info(f"Augmented data written to: {new_audio_path}")
+    return new_audio_path
