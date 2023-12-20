@@ -152,7 +152,6 @@ class Trainer(object):
         # generator forward
         # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
         mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         # initialize generator loss
         gen_loss = 0.0
@@ -263,7 +262,6 @@ class Trainer(object):
         # generator forward
         # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
         mu, logvar, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         # initialize generator loss
         gen_loss = 0.0
@@ -360,7 +358,6 @@ class Trainer(object):
 
         # generator forward
         mu, log_var, y_, s = self.model["generator"](mel, spec_lengths, f0)
-        # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         len50ms = int(self.config.data.sample_rate * 0.05)
         start = np.random.randint(0, self.config.data.batch_max_length - len50ms)

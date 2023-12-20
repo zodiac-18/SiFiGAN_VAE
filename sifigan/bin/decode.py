@@ -28,7 +28,6 @@ from sifigan.datasets import FeatDataset
 # A logger for this file
 logger = getLogger(__name__)
 
-
 @hydra.main(version_base=None, config_path="config", config_name="decode")
 def main(config: DictConfig) -> None:
     """Run decoding process."""
@@ -78,15 +77,14 @@ def main(config: DictConfig) -> None:
         with torch.no_grad(), tqdm(dataset, desc="[decode]") as pbar:
             for idx, (feat_path, c, f0) in enumerate(pbar, 1):
                 spec_lengths = torch.LongTensor([c.shape[0]]).to(device)
-                # mel: 80-dimensional log-melspectrogram
                 mel = torch.FloatTensor(c).unsqueeze(0).transpose(2, 1).to(device)  # (1, 80, T)
                 f0 = torch.FloatTensor(f0).view(1, 1, -1).to(device)
 
                 # perform decoding
                 start = time()
-                # outs: [mu, logvar, x_, s]
+                # outs: [mu, logvar, x_, s, z]
                 outs = model(mel, spec_lengths, f0)
-                y = outs[2]
+                y = outs[2], outs[4]
                 rtf = (time() - start) / (y.size(-1) / config.data.sample_rate)
                 pbar.set_postfix({"RTF": rtf})
                 total_rtf += rtf

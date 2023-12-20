@@ -109,5 +109,5 @@ class VAEGANVocoder(nn.Module):
         x, s = self.decoder(z, f0)
         # x, s = self.decoder(mel, f0)
 
-        # return mu, logvar, x, s
-        return mu, logvar, x, s, z
+        # return mu, logvar, x, s, z # for evaluate latent space
+        return mu, logvar, x, s

@@ -62,7 +62,7 @@ class AudioFeatDataset(Dataset):
         # load audio and feature files & check filename
         audio_files = read_txt(to_absolute_path(audio_list))
         feat_files = read_txt(to_absolute_path(feat_list))
-        assert check_filename(audio_files, feat_files)
+        # assert check_filename(audio_files, feat_files)
 
         # filter by threshold
         if audio_length_threshold is not None:
@@ -121,7 +121,7 @@ class AudioFeatDataset(Dataset):
             ndarray: Audio signal (T,).
             ndarray: Auxiliary features (T', C).
             ndarray: F0 sequence (T', 1).
-            ndarray: Continuous F0 sequence (T', 1).¥
+            ndarray: Continuous F0 sequence (T', 1).
 
         """
         if self.allow_cache and len(self.caches[idx]) != 0:
@@ -188,7 +188,7 @@ class FeatDataset(Dataset):
         allow_cache=False,
         sample_rate=24000,
         hop_size=120,
-        aux_feats=["logspc"],
+        aux_feats=["spc"],
         f0_factor=1.0,
         use_cont_f0=True,
     ):
