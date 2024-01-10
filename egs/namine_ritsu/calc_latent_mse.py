@@ -16,6 +16,7 @@ from logging import getLogger
 from time import time
 
 import hydra
+import itertools
 import numpy as np
 import soundfile as sf
 import torch
@@ -66,23 +67,35 @@ class ObjectiveScore:
         n += 1
         return n, new_mean
 
-    def calc_latent_mse(self, z1, z2):
-        diff_latent_space = (z1 - z2) ** 2
-        latent_mse = np.mean(diff_latent_space.detach().numpy().copy())
-        return latent_mse
+    def calc_latent_mse_truth(self, z1, z2, z3, z4):
+        diff_latent_space_truth = ((z1 - z2) ** 2 + (z1 - z3) ** 2 + (z1 - z4) ** 2) / 3
+        # diff_latent_space_truth = (z1 - z2) ** 2
+        latent_mse_truth = np.mean(diff_latent_space_truth.cpu().detach().numpy().copy())
+        return latent_mse_truth
+    
+    def calc_latent_mse_f0(self, z1, z2, z3, z4):
+        diff_latent_space_f0 = ((z2 - z3) ** 2 + (z3 - z4) ** 2 + (z2 - z4) ** 2) / 3
+        # diff_latent_space_f0 = (z2 - z3) ** 2
+        latent_mse_f0 = np.mean(diff_latent_space_f0.cpu().detach().numpy().copy())
+        return latent_mse_f0
 
-    def append_data(self, z1, z2, f0_factor=1.0):
+    def append_data(self, z1, z2, z3, z4, f0_factor=1.0):
         # calculate scores
         scores = [
-            self.calc_latent_mse(z1, z2),
+            self.calc_latent_mse_truth(z1, z2, z3, z4),
+            self.calc_latent_mse_f0(z1, z2, z3, z4)
         ]
 
         # calculate new means of scores
         self.n_frames[0], self.means[0] = self.online_mean(
             self.n_frames[0], self.means[0], scores[0]
         )
+        # calculate new means of scores
+        self.n_frames[1], self.means[1] = self.online_mean(
+            self.n_frames[1], self.means[1], scores[1]
+        )
 
-@hydra.main(version_base=None, config_path="config", config_name="decode")
+@hydra.main(version_base=None, config_path="config", config_name="calc_mse")
 def main(config: DictConfig) -> None:
     """Run decoding process."""
 
@@ -152,14 +165,16 @@ def main(config: DictConfig) -> None:
             else:
                 _, z4 = outs[2], outs[4]
                 # online calculation
-                obj_score.append_data(z3, z4, f0_factor)
-                logger.info(f"MSE of latent space: {means[0]}")
+                obj_score.append_data(z1, z2, z3, z4, f0_factor)
+                logger.info(f"MSE of latent space (truth and transformed): {means[0]}")
+                logger.info(f"MSE of latent space (transformed and transformed): {means[1]}")
             file_cnt += 1
         print(f"Processed {file_cnt} files.")
         
         # report average RTF
         logger.info(f"Finished calculation of mse.")
         logger.info(f"MSE of latent space: {means[0]}")
+        logger.info(f"MSE of latent space (transformed and transformed): {means[1]}")
 
 
 if __name__ == "__main__":

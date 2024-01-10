@@ -1,0 +1,25 @@
+# Dataset settings
+train_audio: data/scp/namine_ritsu_train_no_dev_aug_2_0.4_2.5.scp # List file of training audio files.
+train_feat: data/scp/namine_ritsu_train_no_dev_aug_2_0.4_2.5.list # List file of training feature files.
+valid_audio: data/scp/namine_ritsu_dev_aug_2_0.4_2.5.scp # List file of validation audio files.
+valid_feat: data/scp/namine_ritsu_dev_aug_2_0.4_2.5.list # List file of validation feature files.
+eval_feat: data/scp/namine_ritsu_eval_f0.list # List file of evaluation feature files for decoding.
+stats: data/stats/namine_ritsu_eval_f0.joblib # Path to the file of statistics.
+allow_cache: true # Whether to allow cache in dataset. If true, it requires cpu memory
+
+# Feature settings
+sample_rate: 24000 # Sampling rate.
+hop_size: 120 # Hop size.
+aux_feats: ["logmsp"] # Auxiliary features.
+use_cont_f0: true # Whether to use continuous f0.
+
+# Collater setting
+batch_max_length: 8400 # Length of each audio in batch. Make sure dividable by hop_size.
+
+# Data loader setting
+batch_size: 16 # Batch size
+num_workers: 1 # Number of workers in Pytorch DataLoader
+pin_memory: true # Whether to pin memory in Pytorch DataLoader
+
+# Other setting
+remove_short_samples: true # Whether to remove samples the length of which are less than batch_max_length

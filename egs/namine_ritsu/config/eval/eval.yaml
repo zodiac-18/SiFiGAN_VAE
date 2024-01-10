@@ -1,0 +1,14 @@
+hydra:
+  run:
+    dir: ./
+  output_subdir: null
+  job_logging:
+    formatters:
+      simple:
+        format: "[%(asctime)s][%(levelname)s][%(module)s | %(lineno)s] %(message)s"
+    disable_existing_loggers: false
+
+sample_rate: 24000
+method_dir: exp/vaevocoder_contentvec_aug_2_1.0/wav/500000
+files: data/scp/namine_ritsu_eval.scp
+feat_files: data/scp/namine_ritsu_eval.list
