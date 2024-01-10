@@ -65,15 +65,15 @@ class VAEGANVocoder(nn.Module):
         self,
         encoder_params={
             "in_x_channels": 80,  # 入力するxのスペクトログラムの周波数の次元
-            "out_z_channels": 192,  # 出力するzのチャネル数
-            "hidden_channels": 256,  # 隠れ層のチャネル数
+            "out_z_channels": 43,  # 出力するzのチャネル数
+            "hidden_channels": 192,  # 隠れ層のチャネル数
             "kernel_size": 7,  # WN内のconv1dのカーネルサイズ
             "dilation_rate": 0.1,  # WN内におけるconv1dのdilationの数値
             "n_resblock": 16,  # WN内のResidual Blockの重ねる数
             "gin_channels": 0,
         },  # e.g., VITS poseterior encoder params
         decoder_params={
-            "in_z_channels": 192,
+            "in_z_channels": 43,
             "out_x_channels": 1,
             "channels": 512,
             "kernel_size": 7,
@@ -110,4 +110,61 @@ class VAEGANVocoder(nn.Module):
         # x, s = self.decoder(mel, f0)
 
         return mu, logvar, x, s, z
+        # return mu, logvar, x, s
+
+class VAEGANVocoder_avg(nn.Module):
+    def __init__(
+        self,
+        encoder_params={
+            "in_x_channels": 80,  # 入力するxのスペクトログラムの周波数の次元
+            "out_z_channels": 43,  # 出力するzのチャネル数
+            "hidden_channels": 192,  # 隠れ層のチャネル数
+            "kernel_size": 7,  # WN内のconv1dのカーネルサイズ
+            "dilation_rate": 0.1,  # WN内におけるconv1dのdilationの数値
+            "n_resblock": 16,  # WN内のResidual Blockの重ねる数
+            "gin_channels": 0,
+        },  # e.g., VITS poseterior encoder params
+        decoder_params={
+            "in_z_channels": 43,
+            "out_x_channels": 1,
+            "channels": 512,
+            "kernel_size": 7,
+            "upsample_scales": (5, 4, 3, 2),
+            "upsample_kernel_sizes": (10, 8, 6, 4),
+            "source_network_params": {
+                "resblock_kernel_size": 3,
+                "resblock_dilations": [(1,), (1, 2), (1, 2, 4), (1, 2, 4, 8)],
+                "use_additional_convs": True,
+            },
+            "filter_network_params": {
+                "resblock_kernel_sizes": (3, 5, 7),
+                "resblock_dilations": [(1, 3, 5), (1, 3, 5), (1, 3, 5)],
+                "use_additional_convs": False,
+            },
+            "sample_rate": 24000,
+            "dense_factors": [0.2, 1, 3, 6],
+            "nonlinear_activation": "LeakyReLU",
+            "nonlinear_activation_params": {"negative_slope": 0.1},
+            "bias": True,
+            "use_weight_norm": True,
+        },
+    ):
+        super(VAEGANVocoder_avg, self).__init__()
+        self.encoder = VITSPosteriorEncoder(**encoder_params)
+        self.decoder = SiFiGANGenerator(**decoder_params)
+
+    def forward(self, mel_source, mel_trans_1, mel_trans_2, spec_length, f0):
+        # 音源, 変換音声1, 変換音声2の場合のみを想定
+        # encode mel to z
+        mu_source, logvar_source, z_source, x_spec_mask_source = self.encoder(mel_source, spec_length)
+        mu_trans_1, logvar_trans_1, z_trans_1, _ = self.encoder(mel_trans_1, spec_length)
+        mu_trans_2, logvar_trans_2, z_trans_2, _ = self.encoder(mel_trans_2, spec_length)
+        mu_list, logvar_list, z_list = [mu_source, mu_trans_1, mu_trans_2], [logvar_source, logvar_trans_1, logvar_trans_2], [z_source, z_trans_1, z_trans_2]
+        m, var = (mu_source + mu_trans_1 + mu_trans_2) / 3, (logvar_source + logvar_trans_1 + logvar_trans_2) / 3
+        z = (m + torch.randn_like(m) * torch.exp(var)) * x_spec_mask_source
+        # decode z to waveform
+        x, s = self.decoder(z, f0)
+        # x, s = self.decoder(mel, f0)
+
+        return mu_list, logvar_list, x, s, z_list
         # return mu, logvar, x, s

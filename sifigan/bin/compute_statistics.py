@@ -52,8 +52,11 @@ def calc_stats(file_list, config):
                 feat = np.log(cf0)
             elif feat_type == "logmsp":
                 logmsp_list = read_hdf5(to_absolute_path(filename), "/logmsp")
-                for i in range(len(logmsp_list)):
-                    scaler[feat_type].partial_fit(logmsp_list[i])
+                if logmsp_list.ndim == 3:
+                    for i in range(len(logmsp_list)):
+                        scaler[feat_type].partial_fit(logmsp_list[i])
+                else:
+                    scaler[feat_type].partial_fit(logmsp_list)
                 continue
             else:
                 feat = read_hdf5(to_absolute_path(filename), f"/{feat_type}")

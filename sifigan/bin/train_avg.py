@@ -151,78 +151,69 @@ class Trainer(object):
         batch = [x.to(self.device) for x in batch]
         y, mel, spec_lengths, f0 = batch
         mel_source, mel_trans_1, mel_trans_2 = mel[:, :, 0, :], mel[:, :, 1, :], mel[:, :, 2, :]
-        out_source, out_trans_1, out_trans_2 = {}, {}, {}
-
         # generator forward
         # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
         # 音源, 変換された音声1, 変換された音声2の全部を出力する方針
-        out_source["mu"], out_source["logvar"], out_source["y_"], out_source["s"], out_source["z"] = self.model["generator"](mel_source, spec_lengths, f0)
-        out_trans_1["mu"], out_trans_1["logvar"], out_trans_1["y_"], out_trans_1["s"], out_trans_1["z"] = self.model["generator"](mel_trans_1, spec_lengths, f0)
-        out_trans_2["mu"], out_trans_2["logvar"], out_trans_2["y_"], out_trans_2["s"], out_trans_2["z"] = self.model["generator"](mel_trans_2, spec_lengths, f0)
+        #out_source["mu"], out_source["logvar"], out_source["y_"], out_source["s"], out_source["z"] = self.model["generator"](mel_source, spec_lengths, f0)
+        #out_trans_1["mu"], out_trans_1["logvar"], out_trans_1["y_"], out_trans_1["s"], out_trans_1["z"] = self.model["generator"](mel_trans_1, spec_lengths, f0)
+        #out_trans_2["mu"], out_trans_2["logvar"], out_trans_2["y_"], out_trans_2["s"], out_trans_2["z"] = self.model["generator"](mel_trans_2, spec_lengths, f0)
 
-        outs = {"out_source": out_source, "out_trans_1": out_trans_1, "out_trans_2": out_trans_2}
+        mu_list, logvar_list, y_, s, z_list = self.model["generator"](mel_source, mel_trans_1, mel_trans_2, spec_lengths, f0)
 
         # initialize generator loss
-        for name, out in outs.items():
-            gen_loss = 0.0
-            mu, logvar, y_, s, z = out["mu"], out["logvar"], out["y_"], out["s"], out["z"]
-            if name == "out_trans_1":
-                z_trans_1 = z
-            elif name == "out_trans_2":
-                z_trans_2 = z
-                
-            # calculate kl divergence loss
-            kl_loss = self.criterion["kl"](mu, logvar) / 3
-            gen_loss += self.config.train.lambda_kl * kl_loss
-            self.total_train_loss["train/kl_loss"] += kl_loss.item()
+        gen_loss = 0.0
+        # calculate kl divergence loss
+        kl_loss = 0.0
+        for i in range(len(mu_list)):
+            kl_loss += self.criterion["kl"](mu_list[i], logvar_list[i]) / 3
+        gen_loss += self.config.train.lambda_kl * kl_loss
+        self.total_train_loss["train/kl_loss"] += kl_loss.item()
 
-            # calculate spectral loss
-            mel_loss = self.criterion["mel"](y_, y) / 3
-            gen_loss += self.config.train.lambda_mel * mel_loss
-            self.total_train_loss["train/mel_loss"] += mel_loss.item()
+        # calculate spectral loss
+        mel_loss = self.criterion["mel"](y_, y)
+        gen_loss += self.config.train.lambda_mel * mel_loss
+        self.total_train_loss["train/mel_loss"] += mel_loss.item()
 
-            # calculate source regularization loss
-            reg_loss = self.criterion["reg"](s, y, f0) / 3
-            gen_loss += self.config.train.lambda_reg * reg_loss
-            self.total_train_loss["train/reg_loss"] += reg_loss.item()
-            
-            # calculate mse or cosine similarity loss of latent space
-            if name == "out_trans_2":
-                latent_loss = self.criterion["latent"](z_trans_1, z_trans_2)
-                gen_loss += self.config.train.lambda_latent * latent_loss
-                self.total_train_loss["train/latent_loss"] += latent_loss.item()
-                
-            # calculate discriminator related losses
-            if self.steps > self.config.train.discriminator_train_start_steps:
-                # calculate feature matching loss
-                if self.config.train.lambda_fm > 0:
-                    p_fake, fmaps_fake = self.model["discriminator"](y_, return_fmaps=True)
-                    with torch.no_grad():
-                        p_real, fmaps_real = self.model["discriminator"](y, return_fmaps=True)
-                    fm_loss = self.criterion["fm"](fmaps_fake, fmaps_real) / 3
-                    gen_loss += self.config.train.lambda_fm * fm_loss
-                    self.total_train_loss["train/fm_loss"] += fm_loss.item()
-                else:
-                    p_fake = self.model["discriminator"](y_)
-                # calculate adversarial loss
-                adv_loss = self.criterion["adv"](p_fake) / 3
-                gen_loss += self.config.train.lambda_adv * adv_loss
-                self.total_train_loss["train/adv_loss"] += adv_loss.item()
+        # calculate source regularization loss
+        reg_loss = self.criterion["reg"](s, y, f0)
+        gen_loss += self.config.train.lambda_reg * reg_loss
+        self.total_train_loss["train/reg_loss"] += reg_loss.item()
 
-            self.total_train_loss["train/generator_loss"] += gen_loss.item()
+        # calculate mse or cosine similarity loss of latent space
+        latent_loss = self.criterion["latent"](z_list[1], z_list[2])
+        gen_loss += self.config.train.lambda_latent * latent_loss
+        self.total_train_loss["train/latent_loss"] += latent_loss.item()
 
-            # discriminator
-            if self.steps > self.config.train.discriminator_train_start_steps:
-                # calculate discriminator loss
-                p_fake = self.model["discriminator"](y_.detach())
-                p_real = self.model["discriminator"](y)
-                # NOTE: the first argument must to be the fake samples
-                fake_loss, real_loss = self.criterion["adv"](p_fake, p_real)
-                fake_loss, real_loss = fake_loss / 3, real_loss / 3
-                dis_loss = fake_loss + real_loss
-                self.total_train_loss["train/fake_loss"] += fake_loss.item()
-                self.total_train_loss["train/real_loss"] += real_loss.item()
-                self.total_train_loss["train/discriminator_loss"] += dis_loss.item()
+        # calculate discriminator related losses
+        if self.steps > self.config.train.discriminator_train_start_steps:
+            # calculate feature matching loss
+            if self.config.train.lambda_fm > 0:
+                p_fake, fmaps_fake = self.model["discriminator"](y_, return_fmaps=True)
+                with torch.no_grad():
+                    p_real, fmaps_real = self.model["discriminator"](y, return_fmaps=True)
+                fm_loss = self.criterion["fm"](fmaps_fake, fmaps_real)
+                gen_loss += self.config.train.lambda_fm * fm_loss
+                self.total_train_loss["train/fm_loss"] += fm_loss.item()
+            else:
+                p_fake = self.model["discriminator"](y_)
+            # calculate adversarial loss
+            adv_loss = self.criterion["adv"](p_fake)
+            gen_loss += self.config.train.lambda_adv * adv_loss
+            self.total_train_loss["train/adv_loss"] += adv_loss.item()
+
+        self.total_train_loss["train/generator_loss"] += gen_loss.item()
+
+        # discriminator
+        if self.steps > self.config.train.discriminator_train_start_steps:
+            # calculate discriminator loss
+            p_fake = self.model["discriminator"](y_.detach())
+            p_real = self.model["discriminator"](y)
+            # NOTE: the first argument must to be the fake samples
+            fake_loss, real_loss = self.criterion["adv"](p_fake, p_real)
+            dis_loss = fake_loss + real_loss
+            self.total_train_loss["train/fake_loss"] += fake_loss.item()
+            self.total_train_loss["train/real_loss"] += real_loss.item()
+            self.total_train_loss["train/discriminator_loss"] += dis_loss.item()
 
         # update generator
         self.optimizer["generator"].zero_grad()
@@ -282,75 +273,60 @@ class Trainer(object):
         batch = [x.to(self.device) for x in batch]
         y, mel, spec_lengths, f0 = batch
         mel_source, mel_trans_1, mel_trans_2 = mel[:, :, 0, :], mel[:, :, 1, :], mel[:, :, 2, :]
-        out_source, out_trans_1, out_trans_2 = {}, {}, {}
-
-        # generator forward
-        # vaevocoderから平均mu,対数分散logvar,生成された信号,生成されたソース信号sを出力
-        # 音源, 変換された音声1, 変換された音声2の全部を出力する方針
-        out_source["mu"], out_source["logvar"], out_source["y_"], out_source["s"], out_source["z"] = self.model["generator"](mel_source, spec_lengths, f0)
-        out_trans_1["mu"], out_trans_1["logvar"], out_trans_1["y_"], out_trans_1["s"], out_trans_1["z"] = self.model["generator"](mel_trans_1, spec_lengths, f0)
-        out_trans_2["mu"], out_trans_2["logvar"], out_trans_2["y_"], out_trans_2["s"], out_trans_2["z"] = self.model["generator"](mel_trans_2, spec_lengths, f0)
-        
-        outs = {"out_source": out_source, "out_trans_1": out_trans_1, "out_trans_2": out_trans_2}
+        mu_list, logvar_list, y_, s, z_list = self.model["generator"](mel_source, mel_trans_1, mel_trans_2, spec_lengths, f0)
 
         # initialize generator loss
-        for name, out in outs.items():
-            gen_loss = 0.0
-            mu, logvar, y_, s, z = out["mu"], out["logvar"], out["y_"], out["s"], out["z"]
-            if name == "out_trans_1":
-                z_trans_1 = z
-            elif name == "out_trans_2":
-                z_trans_2 = z
-            # calculate kl divergence loss
-            kl_loss = self.criterion["kl"](mu, logvar) / 3
-            gen_loss += self.config.train.lambda_kl * kl_loss
-            self.total_eval_loss["eval/kl_loss"] += kl_loss.item()
+        gen_loss = 0.0
+        # calculate kl divergence loss
+        kl_loss = 0.0
+        for i in range(len(mu_list)):
+            kl_loss += self.criterion["kl"](mu_list[i], logvar_list[i]) / 3
+        gen_loss += self.config.train.lambda_kl * kl_loss
+        self.total_eval_loss["eval/kl_loss"] += kl_loss.item()
 
-            # calculate spectral loss
-            mel_loss = self.criterion["mel"](y_, y) / 3
-            gen_loss += self.config.train.lambda_mel * mel_loss
-            self.total_eval_loss["eval/mel_loss"] += mel_loss.item()
+        # calculate spectral loss
+        mel_loss = self.criterion["mel"](y_, y)
+        gen_loss += self.config.train.lambda_mel * mel_loss
+        self.total_eval_loss["eval/mel_loss"] += mel_loss.item()
 
-            # calculate source regularization loss
-            reg_loss = self.criterion["reg"](s, y, f0) / 3
-            gen_loss += self.config.train.lambda_reg * reg_loss
-            self.total_eval_loss["eval/reg_loss"] += reg_loss.item()
+        # calculate source regularization loss
+        reg_loss = self.criterion["reg"](s, y, f0)
+        gen_loss += self.config.train.lambda_reg * reg_loss
+        self.total_eval_loss["eval/reg_loss"] += reg_loss.item()
 
-            # calculate mse loss of latent space
-            if name == "out_trans_2":
-                latent_loss = self.criterion["latent"](z_trans_1, z_trans_2)
-                gen_loss += self.config.train.lambda_latent * latent_loss
-                self.total_eval_loss["eval/latent_loss"] += latent_loss.item()
+        # calculate mse or cosine similarity loss of latent space
+        latent_loss = self.criterion["latent"](z_list[1], z_list[2])
+        gen_loss += self.config.train.lambda_latent * latent_loss
+        self.total_eval_loss["eval/latent_loss"] += latent_loss.item()
 
-            # calculate discriminator related losses
-            if self.steps > self.config.train.discriminator_train_start_steps:
-                # calculate feature matching loss
-                if self.config.train.lambda_fm > 0:
-                    p_fake, fmaps_fake = self.model["discriminator"](y_, return_fmaps=True)
-                    p_real, fmaps_real = self.model["discriminator"](y, return_fmaps=True)
-                    fm_loss = self.criterion["fm"](fmaps_fake, fmaps_real) / 3
-                    gen_loss += self.config.train.lambda_fm * fm_loss
-                    self.total_eval_loss["eval/fm_loss"] += fm_loss.item()
-                else:
-                    p_fake = self.model["discriminator"](y_)
-                # calculate adversarial loss
-                adv_loss = self.criterion["adv"](p_fake) / 3
-                gen_loss += self.config.train.lambda_adv * adv_loss
-                self.total_eval_loss["eval/adv_loss"] += adv_loss.item()
+        # calculate discriminator related losses
+        if self.steps > self.config.train.discriminator_train_start_steps:
+            # calculate feature matching loss
+            if self.config.train.lambda_fm > 0:
+                p_fake, fmaps_fake = self.model["discriminator"](y_, return_fmaps=True)
+                p_real, fmaps_real = self.model["discriminator"](y, return_fmaps=True)
+                fm_loss = self.criterion["fm"](fmaps_fake, fmaps_real)
+                gen_loss += self.config.train.lambda_fm * fm_loss
+                self.total_eval_loss["eval/fm_loss"] += fm_loss.item()
+            else:
+                p_fake = self.model["discriminator"](y_)
+            # calculate adversarial loss
+            adv_loss = self.criterion["adv"](p_fake)
+            gen_loss += self.config.train.lambda_adv * adv_loss
+            self.total_eval_loss["eval/adv_loss"] += adv_loss.item()
 
-            self.total_eval_loss["eval/generator_loss"] += gen_loss.item()
+        self.total_eval_loss["eval/generator_loss"] += gen_loss.item()
 
-            # discriminator
-            if self.steps > self.config.train.discriminator_train_start_steps:
-                # calculate discriminator loss
-                p_real = self.model["discriminator"](y)
-                # NOTE: the first augment must to be the fake sample
-                fake_loss, real_loss = self.criterion["adv"](p_fake, p_real)
-                fake_loss, real_loss = fake_loss / 3, real_loss / 3
-                dis_loss = fake_loss + real_loss
-                self.total_eval_loss["eval/fake_loss"] += fake_loss.item()
-                self.total_eval_loss["eval/real_loss"] += real_loss.item()
-                self.total_eval_loss["eval/discriminator_loss"] += dis_loss.item()
+        # discriminator
+        if self.steps > self.config.train.discriminator_train_start_steps:
+            # calculate discriminator loss
+            p_real = self.model["discriminator"](y)
+            # NOTE: the first augment must to be the fake sample
+            fake_loss, real_loss = self.criterion["adv"](p_fake, p_real)
+            dis_loss = fake_loss + real_loss
+            self.total_eval_loss["eval/fake_loss"] += fake_loss.item()
+            self.total_eval_loss["eval/real_loss"] += real_loss.item()
+            self.total_eval_loss["eval/discriminator_loss"] += dis_loss.item()
 
     def _eval_epoch(self):
         """Evaluate model one epoch."""
@@ -398,11 +374,9 @@ class Trainer(object):
         batch = [x[:1].to(self.device) for x in batch]
         y, mel, spec_lengths, f0 = batch
         mel_source, mel_trans_1, mel_trans_2 = mel[:, :, 0, :], mel[:, :, 1, :], mel[:, :, 2, :]
-        mel = [mel_source, mel_trans_1, mel_trans_2]
-        mel = mel[np.random.randint(0, 3)]
 
         # generator forward
-        mu, log_var, y_, s, z = self.model["generator"](mel, spec_lengths, f0)
+        mu, log_var, y_, s, z = self.model["generator"](mel_source, mel_trans_1, mel_trans_2, spec_lengths, f0)
         # y_, s = self.model["generator"](mel, spec_lengths, f0)
 
         len50ms = int(self.config.data.sample_rate * 0.05)
@@ -594,7 +568,7 @@ def main(config: DictConfig) -> None:
 
     # check directory existence
     out_dir = config.out_dir
-    out_dir += f"_{config.train.lambda_latent}_{config.train.generator_optimizer.lr}"
+    out_dir += f"_{config.train.lambda_latent}"
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 

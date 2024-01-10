@@ -214,8 +214,8 @@ def main():
         f"V/UV Error: {100 * obj_score.n_uv_error_frame / obj_score.n_all_frame}"
     )  # [%]
     print(f"MCD: {means[1][0]}")  # [dB]
-    if f0_factor == 1:
-        print(f"LSD: {means[2][0]}")  # [dB]
+    #if f0_factor == 1:
+    print(f"LSD: {means[2][0]}")  # [dB]
 
 
 if __name__ == "__main__":

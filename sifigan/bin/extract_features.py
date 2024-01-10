@@ -293,7 +293,7 @@ def vaevocoder_feature_extraction(queue, wav_list, config):
             logger.warn(f"all of the f0 values are 0 {wav_name}.")
         
         if config.f0_aug:
-            f0_factor = np.random.uniform(0.5, 2.0, config.f0_conv_num)
+            f0_factor = np.random.uniform(0.4, 2.5, config.f0_conv_num)
             if config.f0_world:
                 x_list = np.array(x + [pyworld.synthesize(f0 * f0_factor[k], sp, ap, fs=config.sample_rate)[:len(x)] for k in range(config.f0_conv_num)])
             elif config.f0_content_vec:

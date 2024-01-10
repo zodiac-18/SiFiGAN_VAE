@@ -1,11 +1,11 @@
 # Dataset settings
-train_audio: data/scp/namine_ritsu_train_no_dev_aug_2.scp # List file of training audio files.
-train_feat: data/scp/namine_ritsu_train_no_dev_aug_2.list # List file of training feature files.
-valid_audio: data/scp/namine_ritsu_dev_aug_2.scp # List file of validation audio files.
-valid_feat: data/scp/namine_ritsu_dev_aug_2.list # List file of validation feature files.
-eval_feat: data/scp/namine_ritsu_eval_aug_2.list # List file of evaluation feature files for decoding.
-stats: data/stats/namine_ritsu_train_no_dev_aug_2.joblib # Path to the file of statistics.
-allow_cache: false # Whether to allow cache in dataset. If true, it requires cpu memory
+train_audio: data/scp/namine_ritsu_train_no_dev_aug_2_0.4_2.5.scp # List file of training audio files.
+train_feat: data/scp/namine_ritsu_train_no_dev_aug_2_0.4_2.5.list # List file of training feature files.
+valid_audio: data/scp/namine_ritsu_dev_aug_2_0.4_2.5.scp # List file of validation audio files.
+valid_feat: data/scp/namine_ritsu_dev_aug_2_0.4_2.5.list # List file of validation feature files.
+eval_feat: data/scp/namine_ritsu_eval.list # List file of evaluation feature files for decoding.
+stats: data/stats/namine_ritsu_train_no_dev_aug_2_0.4_2.5.joblib # Path to the file of statistics.
+allow_cache: true # Whether to allow cache in dataset. If true, it requires cpu memory
 
 # Feature settings
 sample_rate: 24000 # Sampling rate.

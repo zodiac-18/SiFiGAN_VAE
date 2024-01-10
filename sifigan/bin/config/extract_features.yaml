@@ -12,7 +12,7 @@ hydra:
 
 audio: data/scp/namine_ritsu_all.scp # List file of input wav files.
 in_dir: wav # Directory of input feature files.
-out_dir: hdf5_contentvec_aug_2 # Directory to save generated samples.
+out_dir: hdf5_contentvec_aug_2_0.4_2.5 # Directory to save generated samples.
 feature_format: h5 # Feature format.
 sample_rate: 24000 # Sampling rate.
 spkinfo: data/spk_info.yaml # YAML format speaker information.

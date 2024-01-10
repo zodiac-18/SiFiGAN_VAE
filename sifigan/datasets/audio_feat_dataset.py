@@ -123,7 +123,7 @@ class AudioFeatDataset(Dataset):
             ndarray: Audio signal (T,).
             ndarray: Auxiliary features (T', C).
             ndarray: F0 sequence (T', 1).
-            ndarray: Continuous F0 sequence (T', 1).¥
+            ndarray: Continuous F0 sequence (T', 1).
 
         """
         if self.allow_cache and len(self.caches[idx]) != 0:
@@ -282,12 +282,12 @@ class FeatDataset(Dataset):
             if feat_type in ["f0", "cf0"]:  # f0 scaling
                 aux_feat *= self.f0_factor
                 aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
-            elif feat_type == "logmsp":
-                aux_list = []
-                for i in range(len(aux_feat)):
-                    _aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat[i])
-                    aux_list.append(_aux_feat)
-                aux_feat = aux_list
+            #elif feat_type == "logmsp":
+            #    aux_list = []
+            #    for i in range(len(aux_feat)):
+            #        _aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat[i])
+            #        aux_list.append(_aux_feat)
+            #    aux_feat = aux_list
             else:
                 aux_feat = self.scaler[f"{feat_type}"].transform(aux_feat)
             aux_feats += [aux_feat]
@@ -298,15 +298,18 @@ class FeatDataset(Dataset):
             f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/cf0")
         else:
             f0 = read_hdf5(to_absolute_path(self.feat_files[idx]), "/f0")
+        """
         # adjust length
         # TODO: fix gomi coding
         # 1. source音源で長さを揃える
         aux_feats_temp = [0] * len(aux_feats)
-        aux_feats_temp[0], f0, audio = validate_length((aux_feats[0], f0))
+        aux_feats_temp[0], f0 = validate_length((aux_feats[0], f0))
         # 2. source音源に合わせて他の音源の長さも揃える
         for i in range(1, len(aux_feats)):
             aux_feats_temp[i] = aux_feats[i][:len(aux_feats_temp[0])] if len(aux_feats[i]) > len(aux_feats_temp[0]) else aux_feats[i]
         aux_feats = np.array(aux_feats_temp)
+        """
+        aux_feats, f0 = validate_length((aux_feats, f0))
 
         # f0 scaling
         f0 *= self.f0_factor
